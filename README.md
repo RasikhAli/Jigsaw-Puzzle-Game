@@ -37,6 +37,9 @@ To run this project locally, follow these steps:
     ```
     The application will start running on `http://127.0.0.1:5000/`.
 
+## Screenshot
+![Jigsaw Puzzle Game Screenshot](Dashboard.png)
+
 ## Usage
 
 - Open the application in your web browser.
