@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Jigsaw Puzzle Game</title>
+    <style>
+        body {
+            font-family: 'Poppins', sans-serif;
+            background-color: #f8f9fa;
+            color: #333;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            margin: 0;
+            padding: 20px;
+        }
+
+        h1 {
+            color: #333;
+            text-align: center;
+            font-size: 2.5em;
+            margin-bottom: 20px;
+            letter-spacing: 2px;
+        }
+
+        #difficulty-selector {
+            margin-bottom: 20px;
+        }
+
+        #difficulty {
+            padding: 10px;
+            border: none;
+            border-radius: 8px;
+            background-color: #007bff;
+            color: #fff;
+            font-size: 1.1em;
+            cursor: pointer;
+            outline: none;
+            transition: background-color 0.3s;
+        }
+
+        #difficulty:hover {
+            background-color: #0056b3;
+        }
+
+        #new-image-button {
+            margin-top: 10px;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 1.1em;
+            transition: background-color 0.3s;
+            background-color: #28a745;
+            color: #fff;
+        }
+
+        #new-image-button:hover {
+            background-color: #218838;
+        }
+
+        .puzzle-container {
+            display: grid;
+            gap: 5px;
+            margin-top: 20px;
+            border: 2px solid #ddd;
+            padding: 10px;
+            background-color: #fff;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+            border-radius: 15px;
+        }
+
+        .puzzle-piece {
+            cursor: pointer;
+            border-radius: 8px;
+            overflow: hidden;
+            transition: transform 0.2s ease-in-out;
+        }
+
+        .puzzle-piece:hover {
+            transform: scale(1.05);
+        }
+
+        #moves-counter {
+            margin-top: 15px;
+            font-size: 1.3em;
+            color: #007bff;
+            font-weight: bold;
+        }
+
+        #message {
+            margin-top: 20px;
+            font-size: 1.2em;
+            font-weight: bold;
+            color: #28a745;
+        }
+
+        @media (max-width: 768px) {
+            .puzzle-container {
+                transform: scale(0.8);
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <h1>Jigsaw Puzzle Game</h1>
+
+    <div id="difficulty-selector">
+        <label for="difficulty">Select Difficulty:</label>
+        <select id="difficulty" onchange="startGame()">
+            <option value="easy">Easy (20 pieces)</option>
+            <option value="medium">Medium (50 pieces)</option>
+            <option value="hard">Hard (90 pieces)</option>
+        </select>
+        <button id="new-image-button" onclick="resetPuzzle()">Reset Puzzle</button>
+    </div>
+
+    <canvas id="sourceCanvas" style="display:none;"></canvas>
+    <div id="puzzle" class="puzzle-container"></div>
+
+    <div id="moves-counter">Moves: 0</div>
+    <div id="message"></div>
+
+    <script>
+        let puzzleContainer = document.getElementById('puzzle');
+        let currentImage = '';
+        let numPieces = 20;
+        let gridSize;
+        let pieces = [];
+        let correctOrder = [];
+        let selectedPiece = null;
+        let moveCount = 0;
+
+        async function fetchPuzzleData(difficulty) {
+            const response = await fetch(`/get_image/${difficulty}`);
+            const data = await response.json();
+            if (response.ok) {
+                return data;
+            } else {
+                console.error('Error:', data.error);
+            }
+        }
+
+        async function startGame() {
+            let difficulty = document.getElementById('difficulty').value;
+            const data = await fetchPuzzleData(difficulty);
+
+            if (data && data.image_url && data.num_pieces) {
+                currentImage = data.image_url;
+                numPieces = data.num_pieces;
+                moveCount = 0;
+                document.getElementById('moves-counter').textContent = `Moves: ${moveCount}`;
+                document.getElementById('message').textContent = '';
+
+                // Calculate grid size (for square-like grids, rounded down)
+                gridSize = Math.floor(Math.sqrt(numPieces));
+
+                // Load and split the image into puzzle pieces
+                await loadImageAndCreatePieces();
+            }
+        }
+
+        async function loadImageAndCreatePieces() {
+            let img = new Image();
+            img.src = currentImage;
+            await img.decode(); // Wait for the image to load
+
+            const canvas = document.getElementById('sourceCanvas');
+            const context = canvas.getContext('2d');
+            canvas.width = img.width;
+            canvas.height = img.height;
+            context.drawImage(img, 0, 0);
+
+            let pieceWidth = canvas.width / gridSize;
+            let pieceHeight = canvas.height / gridSize;
+
+            pieces = []; // Reset pieces array
+            correctOrder = []; // Reset the correct order array
+
+            for (let y = 0; y < gridSize; y++) {
+                for (let x = 0; x < gridSize; x++) {
+                    let pieceCanvas = document.createElement('canvas');
+                    pieceCanvas.width = pieceWidth;
+                    pieceCanvas.height = pieceHeight;
+                    let pieceContext = pieceCanvas.getContext('2d');
+                    pieceContext.drawImage(
+                        canvas,
+                        x * pieceWidth, y * pieceHeight,
+                        pieceWidth, pieceHeight,
+                        0, 0,
+                        pieceWidth, pieceHeight
+                    );
+                    pieces.push({ element: pieceCanvas, order: pieces.length });
+                    correctOrder.push({ order: pieces.length - 1 }); // Keep track of correct order
+                }
+            }
+
+            // Shuffle and display the pieces
+            shuffleArray(pieces);
+            displayPieces();
+        }
+
+        function displayPieces() {
+            puzzleContainer.innerHTML = '';
+            puzzleContainer.style.gridTemplateColumns = `repeat(${gridSize}, ${pieces[0].element.width}px)`;
+
+            pieces.forEach((piece, index) => {
+                let pieceDiv = document.createElement('div');
+                pieceDiv.classList.add('puzzle-piece');
+                pieceDiv.style.width = `${piece.element.width}px`;
+                pieceDiv.style.height = `${piece.element.height}px`;
+                pieceDiv.appendChild(piece.element);
+
+                pieceDiv.addEventListener('click', () => {
+                    if (selectedPiece === null) {
+                        selectedPiece = index;
+                        pieceDiv.style.border = '2px solid #ff4757';
+                    } else {
+                        swapPieces(selectedPiece, index);
+                        selectedPiece = null;
+                    }
+                });
+
+                puzzleContainer.appendChild(pieceDiv);
+            });
+        }
+
+        function swapPieces(index1, index2) {
+            [pieces[index1], pieces[index2]] = [pieces[index2], pieces[index1]];
+            moveCount++;
+            document.getElementById('moves-counter').textContent = `Moves: ${moveCount}`;
+            displayPieces(); // Re-render the grid with swapped pieces
+            checkCompletion();
+        }
+
+        function shuffleArray(array) {
+            for (let i = array.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [array[i], array[j]] = [array[j], array[i]];
+            }
+        }
+
+        function checkCompletion() {
+            let isCompleted = pieces.every((piece, index) => piece.order === correctOrder[index].order);
+            if (isCompleted) {
+                document.getElementById('message').textContent = `Puzzle completed in ${moveCount} moves!`;
+            }
+        }
+
+        function resetPuzzle() {
+            // Reset the puzzle to its initial state
+            document.getElementById('message').textContent = '';
+            startGame();
+        }
+
+        // Initialize game on page load
+        startGame();
+    </script>
+</body>
+</html>
